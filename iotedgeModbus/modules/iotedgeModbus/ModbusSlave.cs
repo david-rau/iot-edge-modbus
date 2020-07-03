@@ -386,7 +386,26 @@
         #region Private Methods
         protected override async Task ConnectSlave()
         {
-            if (IPAddress.TryParse(config.SlaveConnection, out m_address))
+            string resolve = null;
+            bool is_valid_ip = false;
+
+            is_valid_ip = (IPAddress.TryParse(config.SlaveConnection, out m_address));
+
+            if(!is_valid_ip)
+            {
+                try
+                {
+                    resolve = Dns.GetHostAddresses(config.SlaveConnection)[0].ToString();
+                    is_valid_ip = (IPAddress.TryParse(resolve, out m_address));
+                }
+                catch(Exception e)
+                {
+                    Console.WriteLine("Resolve Slave hostname failed");
+                    Console.WriteLine(e.Message);
+                }
+            }
+
+            if(is_valid_ip)
             {
                 try
                 {
@@ -849,10 +868,17 @@
 
         public ModbusConstants.ConnectionType GetConnectionType()
         {
+            // "SlaveConnection" overloads 3 types of connection :
+            // 1st priority: "SlaveConnection" is a valid IP address                                     => Modbus TCP connection via IPv4
+            // 2nd priority: "SlaveConnection" starts with "COM" (Windows) or "/dev/" (Linux)            => Modbus RTU connection via serial device name
+            // 3rd priority: "SlaveConnection" doesn't match the above 2 cases and is not empty string   => Modbus TCP connection via hostname
+
             if (IPAddress.TryParse(SlaveConnection, out IPAddress address))
                 return ModbusConstants.ConnectionType.ModbusTCP;
-            else if (SlaveConnection.Contains("COM") || SlaveConnection.Contains("/tty"))
+            else if (SlaveConnection.Substring(0, 3) == "COM" || SlaveConnection.Substring(0, 5) == "/dev/")
                 return ModbusConstants.ConnectionType.ModbusRTU;
+            else if(!(string.IsNullOrEmpty(SlaveConnection)))
+                return ModbusConstants.ConnectionType.ModbusTCP;
             //TODO: ModbusRTU ModbusASCII
             return ModbusConstants.ConnectionType.Unknown;
         }
